@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>TOTP One-time password</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  <script type="text/javascript" src="https://code.jquery.com/jquery-1.6.4.js"></script>
+<style>
+    *,body,button,input,textarea,select{text-rendering:optimizeLegibility;-moz-osx-font-smoothing:grayscale}body,div,dl,dt,dd,ul,ol,li,h1,h2,h3,h4,h5,h6,pre,form,fieldset,input,textarea,p,blockquote,th,td{margin:0;padding:0}table{border-collapse:collapse;border-spacing:0}fieldset,img{border:0}address,caption,cite,code,dfn,em,strong,th,var{font-style:normal;font-weight:400}ol,ul{list-style:none}caption,th{text-align:left}h1,h2,h3,h4,h5,h6{font-size:100%;font-weight:400}q:before,q:after{content:''}abbr,acronym{border:0}
+</style>
+<style>body{background:#fff;}</style>
+
+      <script type="text/javascript" src="https://caligatio.github.io/jsSHA/sha.js"></script>
+      <link rel="stylesheet" type="text/css" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css">
+
+<style id="compiled-css" type="text/css">body {padding-top: 60px;}
+.container-fluid {min-width: 100px}</style>
+
+  <script id="insert"></script>
+</head>
+<body>
+    <div class="container-fluid">
+       <div>
+           <div class="row">
+            <button onclick="saveData(document.getElementById('secret').value, 'otpfile.txt')"><p>save to local as file</p></button>
+        <div class="span8">
+          <h1>Time-based One-time Password Algorithm</h1>
+        </div>
+           </div>
+            <div class="row">
+
+                <form>
+                <fieldset>
+
+                    <div class="clearfix">
+                        <label for="secret">Secret (base32)</label>
+                        <div class="input"><input type="text" size="30" name="secret" id="secret" class="xlarge" value="JBSWY3DPEHPK3PXP"></div>
+                    </div>
+                    <!-- /clearfix -->
+                    <div class="clearfix">
+                        <label>Secret (hex)</label>
+                        <div class="input"><span class="label label-default" id="secretHex"></span>
+                            <span id="secretHexLength"></span></div>
+                    </div>
+                    <!-- /clearfix -->
+                    <div class="clearfix">
+                        <label>QR Code</label>
+                        <div class="input"><img id="qrImg" src></div>
+                    </div>
+
+                    <!-- /clearfix -->
+                    <div class="clearfix">
+                        <label>Unix epoch div 30 (padded hex)</label>
+                        <div class="input"><span class="label label-default" id="epoch"></span></div>
+                    </div>
+                    <!-- /clearfix -->
+                    <div class="clearfix">
+                        <label>HMAC(secret, time)</label>
+                        <div class="input" id="hmac"></div>
+                    </div>
+                  <!-- /clearfix -->
+                    <div style="width:20vw; hight:20vh;" class="clearfix">
+                        <label>One-time Password</label>
+                        <div class="input"><span class="label label-primary" id="otp"></span></div>
+                    </div>
+                    <!-- /clearfix -->
+                    <div class="clearfix">
+                        <label>Updating in</label>
+                        <div class="input"><span id="updatingIn"></span></div>
+                    </div>
+                    <!-- /clearfix -->
+
+
+                </fieldset>
+                </form>
+                </div>
+            </div>
+        </div>
+
+
+    <script type="text/javascript">
+
+    function dec2hex(s) { return (s < 15.5 ? '0' : '') + Math.round(s).toString(16); }
+    function hex2dec(s) { return parseInt(s, 16); }
+
+    function base32tohex(base32) {
+        var base32chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var bits = "";
+        var hex = "";
+
+        for (var i = 0; i < base32.length; i++) {
+            var val = base32chars.indexOf(base32.charAt(i).toUpperCase());
+            bits += leftpad(val.toString(2), 5, '0');
+        }
+
+        for (var i = 0; i+4 <= bits.length; i+=4) {
+            var chunk = bits.substr(i, 4);
+            hex = hex + parseInt(chunk, 2).toString(16) ;
+        }
+        return hex;
+
+    }
+
+    function leftpad(str, len, pad) {
+        if (len + 1 >= str.length) {
+            str = Array(len + 1 - str.length).join(pad) + str;
+        }
+        return str;
+    }
+
+    function updateOtp() {
+
+        var key = base32tohex($('#secret').val());
+        var epoch = Math.round(new Date().getTime() / 1000.0);
+        var time = leftpad(dec2hex(Math.floor(epoch / 30)), 16, '0');
+        var shaObj = new jsSHA("SHA-1", "HEX");
+        shaObj.setHMACKey(key, "HEX");
+        shaObj.update(time);
+        var hmac = shaObj.getHMAC("HEX");
+
+        $('#qrImg').attr('src', 'https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=200x200&chld=M|0&cht=qr&chl=otpauth://totp/user@host.com%3Fsecret%3D' + $('#secret').val());
+        $('#secretHex').text(key);
+        $('#secretHexLength').text((key.length * 4) + ' bits');
+        $('#epoch').text(time);
+        $('#hmac').empty();
+
+        if (hmac == 'KEY MUST BE IN BYTE INCREMENTS') {
+            $('#hmac').append($('<span/>').addClass('label important').append(hmac));
+        } else {
+            var offset = hex2dec(hmac.substring(hmac.length - 1));
+            var part1 = hmac.substr(0, offset * 2);
+            var part2 = hmac.substr(offset * 2, 8);
+            var part3 = hmac.substr(offset * 2 + 8, hmac.length - offset);
+            if (part1.length > 0 ) $('#hmac').append($('<span/>').addClass('label label-default').append(part1));
+            $('#hmac').append($('<span/>').addClass('label label-primary').append(part2));
+            if (part3.length > 0) $('#hmac').append($('<span/>').addClass('label label-default').append(part3));
+        }
+
+        var otp = (hex2dec(hmac.substr(offset * 2, 8)) & hex2dec('7fffffff')) + '';
+        otp = (otp).substr(otp.length - 6, 6);
+
+        $('#otp').text(otp);
+    }
+
+function timer()
+{
+    var epoch = Math.round(new Date().getTime() / 1000.0);
+    var countDown = 30 - (epoch % 30);
+    if (epoch % 30 == 0) updateOtp();
+    $('#updatingIn').text(countDown);
+
+}
+
+    $(function () {
+        updateOtp();
+
+        $('#update').click(function (event) {
+            updateOtp();
+            event.preventDefault();
+        });
+
+        $('#secret').keyup(function () {
+            updateOtp();
+        });
+
+        setInterval(timer, 1000);
+    });
+
+
+
+  </script>
+  <script>
+  var saveData = (function () {
+      let a = document.createElement("a");
+      document.body.appendChild(a);
+      a.style = "display: none";
+      return function (data, fileName) {
+          var json = JSON.stringify(data),
+              blob = new Blob([json], {type: "octet/stream"}),
+              url = window.URL.createObjectURL(blob);
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          window.URL.revokeObjectURL(url);
+      };
+  }());
+  </script>
+</body>
+</html>
